@@ -117,9 +117,49 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
         write(row)
         write(move_to_next_row)
 
-def compose_box_content (size, colour, rrp=TOPLEFT, /, *, margin=(0,0), words):
-    ...
+def compose (size, colour, rrp=TOPLEFT, /, *, margin=(0,0), words):
 
+    words = [words] if isinstance(words, str) else words
+
+    box_size = size
+    margin_size = margin
+    relative_reference_points = rrp
+
+    b_r, b_c = box_size
+    m_r, m_c = margin_size
+    r_v, r_h = relative_reference_points
+
+    main_region_rows = b_r - m_r * 2
+    word_region_rows = len(words)
+
+    mr_r = main_region_rows
+    wr_r = word_region_rows
+
+    word_region_start_row = mr_r * r_v // 100 - wr_r * r_v // 100 + m_r
+    wr_sr = word_region_start_row
+
+    # print(b_r, b_c)
+    # print(m_r, m_c)
+    # print(r_v, r_h)
+
+    # print(mr_r)
+    # print(wr_r)
+
+    # print(f"{word_region_start_row=}")
+
+    content = [" " * b_c] * b_r
+
+    word_region_columns = b_c - m_c * 2
+    alignment = {0: "<", 50: "^", 100: ">"}[r_h]
+
+    wr_c = word_region_columns
+    a = alignment
+
+    for i in range(wr_r):
+        content[i+wr_sr] = f"{'':{m_c}}{words[i]:{a}{wr_c}}{'':{m_c}}"
+
+    content[0] = encode((SGR, 38, 5, colour)) + content[0]
+    return content
 
 terminal_attributes = termios.tcgetattr(sys.stdin.fileno())
 
@@ -133,20 +173,31 @@ try:
 
     draw_box((18, 60), 255)
 
-    draw_box((5, 17), 240, TOPLEFT,      offset = (1, 2))
-    draw_box((5, 18), 241, TOPCENTRE,    offset = (1, 0))
-    draw_box((5, 17), 242, TOPRIGHT,     offset = (1, 2))
-    draw_box((4, 17), 243, CENTRELEFT,   offset = (0, 2))
-    draw_box((4, 18), 244, CENTRECENTRE, offset = (0, 0))
-    draw_box((4, 17), 245, CENTRERIGHT,  offset = (0, 2))
-    draw_box((5, 17), 246, BOTTOMLEFT,   offset = (1, 2))
-    draw_box((5, 18), 247, BOTTOMCENTRE, offset = (1, 0))
-    draw_box((5, 17), 248, BOTTOMRIGHT,  offset = (1, 2))
+    w  = ("AB", "012345")
+    c1 = compose((5, 17), 251, TOPLEFT,      margin = (1, 2), words = w)
+    c2 = compose((5, 18), 251, TOPCENTRE,    margin = (1, 2), words = w)
+    c3 = compose((5, 17), 251, TOPRIGHT,     margin = (1, 2), words = w)
+    c4 = compose((4, 17), 253, CENTRELEFT,   margin = (1, 2), words = w)
+    c5 = compose((4, 18), 253, CENTRECENTRE, margin = (1, 2), words = w)
+    c6 = compose((4, 17), 253, CENTRERIGHT,  margin = (1, 2), words = w)
+    c7 = compose((5, 17), 255, BOTTOMLEFT,   margin = (1, 2), words = w)
+    c8 = compose((5, 18), 255, BOTTOMCENTRE, margin = (1, 2), words = w)
+    c9 = compose((5, 17), 255, BOTTOMRIGHT,  margin = (1, 2), words = w)
 
-    sys.stdout.write(encode((SGR, 39, 49), (SET, 2, 3), HCP))
+    draw_box((5, 17), 235, TOPLEFT,      offset = (1, 2), content = c1)
+    draw_box((5, 18), 236, TOPCENTRE,    offset = (1, 0), content = c2)
+    draw_box((5, 17), 237, TOPRIGHT,     offset = (1, 2), content = c3)
+    draw_box((4, 17), 238, CENTRELEFT,   offset = (0, 2), content = c4)
+    draw_box((4, 18), 239, CENTRECENTRE, offset = (0, 0), content = c5)
+    draw_box((4, 17), 240, CENTRERIGHT,  offset = (0, 2), content = c6)
+    draw_box((5, 17), 241, BOTTOMLEFT,   offset = (1, 2), content = c7)
+    draw_box((5, 18), 242, BOTTOMCENTRE, offset = (1, 0), content = c8)
+    draw_box((5, 17), 243, BOTTOMRIGHT,  offset = (1, 2), content = c9)
+
+    sys.stdout.write(encode((SET, 2, 3), (SGR, 39, 49), HCP))
     sys.stdout.flush()
     sys.stdin.read(1)
 
 finally:
     termios.tcsetattr(sys.stdin.fileno(), termios.TCSAFLUSH, terminal_attributes)
-    write(encode((SET, DOCSIZE[0], 1), SCP))
+    write(encode((SET, DOCSIZE[0], 1), NL, SCP))
