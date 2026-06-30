@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 19 June
+# 29 June
 # Editor by Bear
 
 import sys
@@ -117,49 +117,41 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
         write(row)
         write(move_to_next_row)
 
-def compose (size, colour, rrp=TOPLEFT, /, *, margin=(0,0), words):
+def content (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), words):
+
+    content = [" " * size[1]] * size[0]
 
     words = [words] if isinstance(words, str) else words
+    words_rows = len(words)
 
-    box_size = size
-    margin_size = margin
-    relative_reference_points = rrp
+    b_r, b_c = size
+    m_r, m_c = margin
 
-    b_r, b_c = box_size
-    m_r, m_c = margin_size
-    r_v, r_h = relative_reference_points
+    inner_size = b_r - 2 * m_r, b_c - 2 * m_c
 
-    main_region_rows = b_r - m_r * 2
-    word_region_rows = len(words)
+    i_r, i_c = inner_size
+    w_r = words_rows
 
-    mr_r = main_region_rows
-    wr_r = word_region_rows
-
-    word_region_start_row = mr_r * r_v // 100 - wr_r * r_v // 100 + m_r
-    wr_sr = word_region_start_row
+    word_region_start_row = i_r * rrv // 100 - w_r * rrv // 100
+    word_region_start_row += m_r
 
     # print(b_r, b_c)
     # print(m_r, m_c)
-    # print(r_v, r_h)
-
-    # print(mr_r)
-    # print(wr_r)
+    # print(i_r, i_c)
+    # print(w_r)
 
     # print(f"{word_region_start_row=}")
 
-    content = [" " * b_c] * b_r
+    h = {0: "<", 50: "^", 100: ">"}[h]
+    s = word_region_start_row
 
-    word_region_columns = b_c - m_c * 2
-    alignment = {0: "<", 50: "^", 100: ">"}[r_h]
-
-    wr_c = word_region_columns
-    a = alignment
-
-    for i in range(wr_r):
-        content[i+wr_sr] = f"{'':{m_c}}{words[i]:{a}{wr_c}}{'':{m_c}}"
+    for i in range(w_r):
+        content[s+i] = f"{'':{m_c}}{words[i]:{h}{i_c}}{'':{m_c}}"
 
     content[0] = encode((SGR, 38, 5, colour)) + content[0]
+
     return content
+
 
 terminal_attributes = termios.tcgetattr(sys.stdin.fileno())
 
@@ -169,20 +161,21 @@ write(clear_display)
 try:
     tty.setcbreak(sys.stdin.fileno(), termios.TCSAFLUSH)
 
-    # TEST PATTERN FOR DRAW_BOX() AND COMPOSE_BOX_CONTENT()
+    # TEST PATTERN FOR DRAW_BOX() AND CONTENT()
 
     draw_box((18, 60), 255)
 
     w  = ("AB", "012345")
-    c1 = compose((5, 17), 251, TOPLEFT,      margin = (1, 2), words = w)
-    c2 = compose((5, 18), 251, TOPCENTRE,    margin = (1, 2), words = w)
-    c3 = compose((5, 17), 251, TOPRIGHT,     margin = (1, 2), words = w)
-    c4 = compose((4, 17), 253, CENTRELEFT,   margin = (1, 2), words = w)
-    c5 = compose((4, 18), 253, CENTRECENTRE, margin = (1, 2), words = w)
-    c6 = compose((4, 17), 253, CENTRERIGHT,  margin = (1, 2), words = w)
-    c7 = compose((5, 17), 255, BOTTOMLEFT,   margin = (1, 2), words = w)
-    c8 = compose((5, 18), 255, BOTTOMCENTRE, margin = (1, 2), words = w)
-    c9 = compose((5, 17), 255, BOTTOMRIGHT,  margin = (1, 2), words = w)
+    m  = (1, 2)
+    c1 = content((5, 17), 251, TOP,    LEFT,   margin = m, words = w)
+    c2 = content((5, 18), 251, TOP,    CENTRE, margin = m, words = w)
+    c3 = content((5, 17), 251, TOP,    RIGHT,  margin = m, words = w)
+    c4 = content((4, 17), 253, CENTRE, LEFT,   margin = m, words = w)
+    c5 = content((4, 18), 253, CENTRE, CENTRE, margin = m, words = w)
+    c6 = content((4, 17), 253, CENTRE, RIGHT,  margin = m, words = w)
+    c7 = content((5, 17), 255, BOTTOM, LEFT,   margin = m, words = w)
+    c8 = content((5, 18), 255, BOTTOM, CENTRE, margin = m, words = w)
+    c9 = content((5, 17), 255, BOTTOM, RIGHT,  margin = m, words = w)
 
     draw_box((5, 17), 235, TOPLEFT,      offset = (1, 2), content = c1)
     draw_box((5, 18), 236, TOPCENTRE,    offset = (1, 0), content = c2)
@@ -194,7 +187,7 @@ try:
     draw_box((5, 18), 242, BOTTOMCENTRE, offset = (1, 0), content = c8)
     draw_box((5, 17), 243, BOTTOMRIGHT,  offset = (1, 2), content = c9)
 
-    sys.stdout.write(encode((SET, 2, 3), (SGR, 39, 49), HCP))
+    sys.stdout.write(encode((SET, 1, 1), (SGR, 39, 49), HCP))
     sys.stdout.flush()
     sys.stdin.read(1)
 
