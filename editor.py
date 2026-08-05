@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 29 June
+# 4 August
 # Editor by Bear
 
 import sys
@@ -32,8 +32,8 @@ ELB = CSI, 'K', 1   # ""    ""      BEFORE
 ELC = CSI, 'K', 2   # ""    ""      COMPLETE
 ECA = CSI, 'X'      # ERASE CHAR    AFTER
 DCA = CSI, 'P'      # DEL   ""      ""
-SCP = CSI, '?25h'   # SHOW CURSOR POSITION
-HCP = CSI, '?25l'   # HIDE ""     ""
+SAP = CSI, '?25h'   # SHOW ACTIVE POSITION
+HAP = CSI, '?25l'   # HIDE ""     ""
 SGR = CSI, 'm'      # SELECT GRAPHIC RENDITION [REC. 416]
 FC  = OSC, STM, 10  # FOREGROUND COLOUR
 BC  = OSC, STM, 11  # BACKGROUND ""
@@ -70,6 +70,8 @@ def encode (*commands):
             case _: raise ValueError
     return code
 
+# ----- #
+
 def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
 
     document_size = DOCSIZE
@@ -83,28 +85,15 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
     draw_procedure_start_row = d_r * r_v // 100 - b_r * r_v // 100
     draw_procedure_start_column = d_c * r_h // 100 - b_c * r_h // 100
 
-    # print(d_r, d_c)
-    # print(b_r, b_c)
-    # print(r_v, r_h)
-
-    # print(f"{draw_procedure_start_row=}")
-    # print(f"{draw_procedure_start_column=}")
-
     r_vc, r_hc = CENTRECENTRE
 
     direction_to_centre_row = 2 * ((r_vc - r_v) >> 6) + 1
     direction_to_centre_column = 2 * ((r_hc - r_h) >> 6) + 1
 
-    # print(f"{direction_to_centre_row=}")
-    # print(f"{direction_to_centre_column=}")
-
     o_r, o_c = offset
 
     draw_procedure_start_row += direction_to_centre_row * o_r + 1
     draw_procedure_start_column += direction_to_centre_column * o_c + 1
-
-    # print(f"{draw_procedure_start_row=}")
-    # print(f"{draw_procedure_start_column=}")
 
     content = content or [" " * b_c] * b_r
 
@@ -117,65 +106,63 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
         write(row)
         write(move_to_next_row)
 
-def content (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), words):
+def bx_compose (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
 
-    content = [" " * size[1]] * size[0]
+    box_size = size
+    box_margins = margin
 
-    words = [words] if isinstance(words, str) else words
-    words_rows = len(words)
+    b_r, b_c = box_size
+    m_r, m_c = box_margins
 
-    b_r, b_c = size
-    m_r, m_c = margin
+    inner_region_size = b_r - 2 * m_r, b_c - 2 * m_c
 
-    inner_size = b_r - 2 * m_r, b_c - 2 * m_c
+    norm_message = [message] if isinstance(message, str) else message
+    message_region_rows = len(norm_message)
 
-    i_r, i_c = inner_size
-    w_r = words_rows
+    ir_r, ir_c = inner_region_size
+    mr_r, mr_c = message_region_rows, ir_c
 
-    word_region_start_row = i_r * rrv // 100 - w_r * rrv // 100
-    word_region_start_row += m_r
+    message_start_row = ir_r * rrv // 100 - mr_r * rrv // 100
+    message_start_row += m_r
 
-    # print(b_r, b_c)
-    # print(m_r, m_c)
-    # print(i_r, i_c)
-    # print(w_r)
+    content = [" " * b_c] * b_r
 
-    # print(f"{word_region_start_row=}")
+    align = {0: "<", 50: "^", 100: ">"}[h]
 
-    h = {0: "<", 50: "^", 100: ">"}[h]
-    s = word_region_start_row
-
-    for i in range(w_r):
-        content[s+i] = f"{'':{m_c}}{words[i]:{h}{i_c}}{'':{m_c}}"
+    for i in range(mr_r):
+        row_message = f"{'':{m_c}}{norm_message[i]:{align}{mr_c}}{'':{m_c}}"
+        content[message_start_row + i] = row_message
 
     content[0] = encode((SGR, 38, 5, colour)) + content[0]
 
     return content
 
-
-terminal_attributes = termios.tcgetattr(sys.stdin.fileno())
+# ----- #
 
 clear_display = encode((SGR, 39, 49), (SET, 1, 1), EDA, EBF)
 write(clear_display)
 
-try:
-    tty.setcbreak(sys.stdin.fileno(), termios.TCSAFLUSH)
+fd = sys.stdin.fileno()
+terminal_attributes = termios.tcgetattr(fd)
 
-    # TEST PATTERN FOR DRAW_BOX() AND CONTENT()
+try:
+    tty.setcbreak(fd, termios.TCSAFLUSH)
+
+    # TEST PATTERN FOR DRAW_BOX() AND BX_COMPOSE()
 
     draw_box((18, 60), 255)
 
     w  = ("AB", "012345")
     m  = (1, 2)
-    c1 = content((5, 17), 251, TOP,    LEFT,   margin = m, words = w)
-    c2 = content((5, 18), 251, TOP,    CENTRE, margin = m, words = w)
-    c3 = content((5, 17), 251, TOP,    RIGHT,  margin = m, words = w)
-    c4 = content((4, 17), 253, CENTRE, LEFT,   margin = m, words = w)
-    c5 = content((4, 18), 253, CENTRE, CENTRE, margin = m, words = w)
-    c6 = content((4, 17), 253, CENTRE, RIGHT,  margin = m, words = w)
-    c7 = content((5, 17), 255, BOTTOM, LEFT,   margin = m, words = w)
-    c8 = content((5, 18), 255, BOTTOM, CENTRE, margin = m, words = w)
-    c9 = content((5, 17), 255, BOTTOM, RIGHT,  margin = m, words = w)
+    c1 = bx_compose((5, 17), 251, TOP,    LEFT,   margin = m, message = w)
+    c2 = bx_compose((5, 18), 251, TOP,    CENTRE, margin = m, message = w)
+    c3 = bx_compose((5, 17), 251, TOP,    RIGHT,  margin = m, message = w)
+    c4 = bx_compose((4, 17), 253, CENTRE, LEFT,   margin = m, message = w)
+    c5 = bx_compose((4, 18), 253, CENTRE, CENTRE, margin = m, message = w)
+    c6 = bx_compose((4, 17), 253, CENTRE, RIGHT,  margin = m, message = w)
+    c7 = bx_compose((5, 17), 255, BOTTOM, LEFT,   margin = m, message = w)
+    c8 = bx_compose((5, 18), 255, BOTTOM, CENTRE, margin = m, message = w)
+    c9 = bx_compose((5, 17), 255, BOTTOM, RIGHT,  margin = m, message = w)
 
     draw_box((5, 17), 235, TOPLEFT,      offset = (1, 2), content = c1)
     draw_box((5, 18), 236, TOPCENTRE,    offset = (1, 0), content = c2)
@@ -187,10 +174,10 @@ try:
     draw_box((5, 18), 242, BOTTOMCENTRE, offset = (1, 0), content = c8)
     draw_box((5, 17), 243, BOTTOMRIGHT,  offset = (1, 2), content = c9)
 
-    sys.stdout.write(encode((SET, 1, 1), (SGR, 39, 49), HCP))
+    sys.stdout.write(encode((SET, 1, 1), (SGR, 39, 49), HAP))
     sys.stdout.flush()
     sys.stdin.read(1)
 
 finally:
-    termios.tcsetattr(sys.stdin.fileno(), termios.TCSAFLUSH, terminal_attributes)
-    write(encode((SET, DOCSIZE[0], 1), NL, SCP))
+    termios.tcsetattr(fd, termios.TCSAFLUSH, terminal_attributes)
+    write(encode((SET, DOCSIZE[0], 1), NL, SAP))
