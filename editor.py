@@ -1,10 +1,16 @@
 #!/usr/bin/env python3
 
-# 4 August
+# 15 August
 # Editor by Bear
 
 import sys
-import tty, termios
+import termios
+
+IFLAG = 0
+OFLAG = 1
+CFLAG = 2
+LFLAG = 3
+CC    = 6
 
 ESC = '\x1b'
 CSI = '\x1b\x5b'
@@ -70,8 +76,6 @@ def encode (*commands):
             case _: raise ValueError
     return code
 
-# ----- #
-
 def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
 
     document_size = DOCSIZE
@@ -106,7 +110,7 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
         write(row)
         write(move_to_next_row)
 
-def bx_compose (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
+def conform (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
 
     box_size = size
     box_margins = margin
@@ -137,32 +141,35 @@ def bx_compose (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
 
     return content
 
-# ----- #
-
-clear_display = encode((SGR, 39, 49), (SET, 1, 1), EDA, EBF)
+clear_display = encode((SET, 1, 1), (SGR, 39, 49), EDA, EBF)
 write(clear_display)
 
 fd = sys.stdin.fileno()
-terminal_attributes = termios.tcgetattr(fd)
+save = termios.tcgetattr(fd)
+state = termios.tcgetattr(fd)
+
+state[LFLAG] &= ~(termios.ICANON | termios.ECHO)
+state[CC][termios.VMIN] = 1
+state[CC][termios.VTIME] = 0
 
 try:
-    tty.setcbreak(fd, termios.TCSAFLUSH)
+    termios.tcsetattr(fd, termios.TCSAFLUSH, state)
 
-    # TEST PATTERN FOR DRAW_BOX() AND BX_COMPOSE()
+    # TEST PATTERN FOR DRAW_BOX() AND CONFORM()
 
-    draw_box((18, 60), 255)
+    draw_box(DOCSIZE, 255)
 
     w  = ("AB", "012345")
     m  = (1, 2)
-    c1 = bx_compose((5, 17), 251, TOP,    LEFT,   margin = m, message = w)
-    c2 = bx_compose((5, 18), 251, TOP,    CENTRE, margin = m, message = w)
-    c3 = bx_compose((5, 17), 251, TOP,    RIGHT,  margin = m, message = w)
-    c4 = bx_compose((4, 17), 253, CENTRE, LEFT,   margin = m, message = w)
-    c5 = bx_compose((4, 18), 253, CENTRE, CENTRE, margin = m, message = w)
-    c6 = bx_compose((4, 17), 253, CENTRE, RIGHT,  margin = m, message = w)
-    c7 = bx_compose((5, 17), 255, BOTTOM, LEFT,   margin = m, message = w)
-    c8 = bx_compose((5, 18), 255, BOTTOM, CENTRE, margin = m, message = w)
-    c9 = bx_compose((5, 17), 255, BOTTOM, RIGHT,  margin = m, message = w)
+    c1 = conform((5, 17), 251, TOP,    LEFT,   margin = m, message = w)
+    c2 = conform((5, 18), 251, TOP,    CENTRE, margin = m, message = w)
+    c3 = conform((5, 17), 251, TOP,    RIGHT,  margin = m, message = w)
+    c4 = conform((4, 17), 253, CENTRE, LEFT,   margin = m, message = w)
+    c5 = conform((4, 18), 253, CENTRE, CENTRE, margin = m, message = w)
+    c6 = conform((4, 17), 253, CENTRE, RIGHT,  margin = m, message = w)
+    c7 = conform((5, 17), 255, BOTTOM, LEFT,   margin = m, message = w)
+    c8 = conform((5, 18), 255, BOTTOM, CENTRE, margin = m, message = w)
+    c9 = conform((5, 17), 255, BOTTOM, RIGHT,  margin = m, message = w)
 
     draw_box((5, 17), 235, TOPLEFT,      offset = (1, 2), content = c1)
     draw_box((5, 18), 236, TOPCENTRE,    offset = (1, 0), content = c2)
@@ -174,10 +181,10 @@ try:
     draw_box((5, 18), 242, BOTTOMCENTRE, offset = (1, 0), content = c8)
     draw_box((5, 17), 243, BOTTOMRIGHT,  offset = (1, 2), content = c9)
 
-    sys.stdout.write(encode((SET, 1, 1), (SGR, 39, 49), HAP))
+    sys.stdout.write(encode(HAP))
     sys.stdout.flush()
     sys.stdin.read(1)
 
 finally:
-    termios.tcsetattr(fd, termios.TCSAFLUSH, terminal_attributes)
-    write(encode((SET, DOCSIZE[0], 1), NL, SAP))
+    termios.tcsetattr(fd, termios.TCSAFLUSH, save)
+    write(encode((SET, DOCSIZE[0], 1), NL, (SGR, 39, 49), SAP))
