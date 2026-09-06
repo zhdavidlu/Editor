@@ -1,49 +1,51 @@
 #!/usr/bin/env python3
 
-# 15 August
+# 5 September
 # Editor by Bear
 
-import sys
+import rwd
 import termios
 
-IFLAG = 0
-OFLAG = 1
-CFLAG = 2
-LFLAG = 3
-CC    = 6
+ESC = '\x1b'       # ESCAPE
+CSI = '\x1b\x5b'   # CONTROL SEQUENCE INTRODUCER
+OSC = '\x1b\x5d'   # OPERATING SYSTEM COMMAND
+STM = '\x1b\x5c'   # STRING TERMINATOR
+DEC = '\x1b\x5b?'  # DEC CONTROL SEQUENCE
 
-ESC = '\x1b'
-CSI = '\x1b\x5b'
-STM = '\x1b\x5c'
-OSC = '\x1b\x5d'
+UP  = CSI, 'A'       # UP
+DN  = CSI, 'B'       # DOWN
+RT  = CSI, 'C'       # RIGHT
+LT  = CSI, 'D'       # LEFT
+NL  = CSI, 'E'       # NEXT LINE
+PL  = CSI, 'F'       # PREVIOUS LINE
+POS = CSI, 'H'       # SET      POSITION
+ROW = CSI, 'd'       # ROW      ""
+COL = CSI, 'G'       # COLUMN   ""
+SAV = ESC,  7        # SAVE     ""
+RST = ESC,  8        # RESTORE  ""
+REP = CSI, 'n', 6    # REPORT   ""
+EBF = CSI, 'J', 3    # ERASE BUFFER
+EDA = CSI, 'J', 0    # ERASE DISPLAY AFTER
+EDB = CSI, 'J', 1    # ""    ""      BEFORE
+EDC = CSI, 'J', 2    # ""    ""      COMPLETE
+ELA = CSI, 'K', 0    # ERASE LINE    AFTER
+ELB = CSI, 'K', 1    # ""    ""      BEFORE
+ELC = CSI, 'K', 2    # ""    ""      COMPLETE
+ECA = CSI, 'X'       # ERASE CHAR    AFTER
+ECS = CSI, 'P'       # ""    ""      SHIFT
+SGR = CSI, 'm'       # SELECT GRAPHIC RENDITION [REC. 416]
+CDD = OSC, STM, 10   # COLOUR DEFAULT DISPLAY
+CDB = OSC, STM, 11   # ""     ""      BACKGROUND
+CDH = OSC, STM, 17   # ""     ""      HIGHLIGHT
+CD  = CSI, 'm', 38   #        COLOUR  DISPLAY
+CB  = CSI, 'm', 48   #        ""      BACKGROUND
+MCS = DEC, 'h', 25   # MODE   CURSOR  SHOW
+MCH = DEC, 'l', 25   # ""     ""      HIDE
+MBA = DEC, 'h', 1049 # ""     BUFFER  ALTERNATE
+MBN = DEC, 'l', 1049 # ""     ""      NORMAL
 
-UP  = CSI, 'A'      # UP
-DN  = CSI, 'B'      # DOWN
-RT  = CSI, 'C'      # RIGHT
-LT  = CSI, 'D'      # LEFT
-NL  = CSI, 'E'      # NEXT LINE
-PL  = CSI, 'F'      # PREVIOUS LINE
-ROW = CSI, 'd'      # ROW     POSITION
-COL = CSI, 'G'      # COLUMN  ""
-SET = CSI, 'H'      # SET     ""
-SAV = ESC,  7       # SAVE    ""
-RST = ESC,  8       # RESTORE ""
-REP = CSI, 'n', 6   # REPORT  ""
-EDA = CSI, 'J', 0   # ERASE DISPLAY AFTER
-EDB = CSI, 'J', 1   # ""    ""      BEFORE
-EDC = CSI, 'J', 2   # ""    ""      COMPLETE
-EBF = CSI, 'J', 3   # ERASE BUFFER
-ELA = CSI, 'K', 0   # ERASE LINE    AFTER
-ELB = CSI, 'K', 1   # ""    ""      BEFORE
-ELC = CSI, 'K', 2   # ""    ""      COMPLETE
-ECA = CSI, 'X'      # ERASE CHAR    AFTER
-DCA = CSI, 'P'      # DEL   ""      ""
-SAP = CSI, '?25h'   # SHOW ACTIVE POSITION
-HAP = CSI, '?25l'   # HIDE ""     ""
-SGR = CSI, 'm'      # SELECT GRAPHIC RENDITION [REC. 416]
-FC  = OSC, STM, 10  # FOREGROUND COLOUR
-BC  = OSC, STM, 11  # BACKGROUND ""
-HC  = OSC, STM, 17  # HIGHLIGHT  ""
+RGB = 2
+IDX = 5
 
 TOP = LEFT = 0
 CENTRE = 50
@@ -59,8 +61,16 @@ BOTTOMLEFT   = BOTTOM, LEFT
 BOTTOMCENTRE = BOTTOM, CENTRE
 BOTTOMRIGHT  = BOTTOM, RIGHT
 
+IFLAG = 0  # INPUT   MODES
+OFLAG = 1  # OUTPUT  ""
+CFLAG = 2  # CONTROL ""
+LFLAG = 3  # LOCAL   ""
+CCHAR = 6  # CONTROL CHARACTERS
+
 DOCSIZE = (18, 60)
-write = sys.stdout.write
+
+read = rwd.i
+write = rwd.o
 
 def _encode_cmd (identity, modifier=()):
     start, end, *between = *identity, *modifier
@@ -101,8 +111,8 @@ def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
 
     content = content or [" " * b_c] * b_r
 
-    write(encode((SET, draw_procedure_start_row, draw_procedure_start_column)))
-    write(encode((SGR, 48, 5, colour)))
+    write(encode((POS, draw_procedure_start_row, draw_procedure_start_column)))
+    write(encode((CB, *colour)))
 
     move_to_next_row = encode(NL, (COL, draw_procedure_start_column))
 
@@ -137,54 +147,9 @@ def conform (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
         row_message = f"{'':{m_c}}{norm_message[i]:{align}{mr_c}}{'':{m_c}}"
         content[message_start_row + i] = row_message
 
-    content[0] = encode((SGR, 38, 5, colour)) + content[0]
+    content[0] = encode((CD, *colour)) + content[0]
 
     return content
 
-clear_display = encode((SET, 1, 1), (SGR, 39, 49), EDA, EBF)
-write(clear_display)
-
-fd = sys.stdin.fileno()
-save = termios.tcgetattr(fd)
-state = termios.tcgetattr(fd)
-
-state[LFLAG] &= ~(termios.ICANON | termios.ECHO)
-state[CC][termios.VMIN] = 1
-state[CC][termios.VTIME] = 0
-
-try:
-    termios.tcsetattr(fd, termios.TCSAFLUSH, state)
-
-    # TEST PATTERN FOR DRAW_BOX() AND CONFORM()
-
-    draw_box(DOCSIZE, 255)
-
-    w  = ("AB", "012345")
-    m  = (1, 2)
-    c1 = conform((5, 17), 251, TOP,    LEFT,   margin = m, message = w)
-    c2 = conform((5, 18), 251, TOP,    CENTRE, margin = m, message = w)
-    c3 = conform((5, 17), 251, TOP,    RIGHT,  margin = m, message = w)
-    c4 = conform((4, 17), 253, CENTRE, LEFT,   margin = m, message = w)
-    c5 = conform((4, 18), 253, CENTRE, CENTRE, margin = m, message = w)
-    c6 = conform((4, 17), 253, CENTRE, RIGHT,  margin = m, message = w)
-    c7 = conform((5, 17), 255, BOTTOM, LEFT,   margin = m, message = w)
-    c8 = conform((5, 18), 255, BOTTOM, CENTRE, margin = m, message = w)
-    c9 = conform((5, 17), 255, BOTTOM, RIGHT,  margin = m, message = w)
-
-    draw_box((5, 17), 235, TOPLEFT,      offset = (1, 2), content = c1)
-    draw_box((5, 18), 236, TOPCENTRE,    offset = (1, 0), content = c2)
-    draw_box((5, 17), 237, TOPRIGHT,     offset = (1, 2), content = c3)
-    draw_box((4, 17), 238, CENTRELEFT,   offset = (0, 2), content = c4)
-    draw_box((4, 18), 239, CENTRECENTRE, offset = (0, 0), content = c5)
-    draw_box((4, 17), 240, CENTRERIGHT,  offset = (0, 2), content = c6)
-    draw_box((5, 17), 241, BOTTOMLEFT,   offset = (1, 2), content = c7)
-    draw_box((5, 18), 242, BOTTOMCENTRE, offset = (1, 0), content = c8)
-    draw_box((5, 17), 243, BOTTOMRIGHT,  offset = (1, 2), content = c9)
-
-    sys.stdout.write(encode(HAP))
-    sys.stdout.flush()
-    sys.stdin.read(1)
-
-finally:
-    termios.tcsetattr(fd, termios.TCSAFLUSH, save)
-    write(encode((SET, DOCSIZE[0], 1), NL, (SGR, 39, 49), SAP))
+if __name__ == "__main__":
+    ...
