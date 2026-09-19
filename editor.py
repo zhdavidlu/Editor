@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-# 5 September
+# 19 September
 # Editor by Bear
 
-import rwd
+import os
+import select
 import termios
+from contextlib import contextmanager
 
 ESC = '\x1b'       # ESCAPE
 CSI = '\x1b\x5b'   # CONTROL SEQUENCE INTRODUCER
@@ -67,10 +69,10 @@ CFLAG = 2  # CONTROL ""
 LFLAG = 3  # LOCAL   ""
 CCHAR = 6  # CONTROL CHARACTERS
 
-DOCSIZE = (18, 60)
+STDIN = 0
+STDOUT = 1
 
-read = rwd.i
-write = rwd.o
+DOCSIZE = [18, 60]
 
 def _encode_cmd (identity, modifier=()):
     start, end, *between = *identity, *modifier
@@ -151,5 +153,109 @@ def conform (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
 
     return content
 
+def _ascii (character):
+
+    if ord(character) != 0x1b:
+        return character
+
+    more_characters_in_queue = select.select([STDIN], [], [], 0.04)[0]
+
+    if not more_characters_in_queue:
+        return character
+
+    next_character = os.read(STDIN, 1)
+    characters = bytearray(character + next_character)
+
+    match ord(next_character):
+        case 0x5b: # CSI
+            for i in range(64):
+                characters += os.read(STDIN, 1)
+                if 0x40 <= characters[-1] <= 0x7e:
+                    return characters
+        case 0x50|0x5d: # DCS / OSC
+            for i in range(64):
+                characters += os.read(STDIN, 1)
+                if characters[-2:] == STM.encode("ascii"):
+                    return characters
+        case intermediate if 0x20 <= intermediate <= 0x2f:
+            for i in range(8):
+                characters += os.read(STDIN, 1)
+                if 0x30 <= characters[-1] <= 0x7e:
+                    return characters
+        case final if 0x30 <= final <= 0x7e:
+            return characters
+        case n if n < 0x20 or n == 0x7f:
+            raise ValueError
+
+def _unicode (character):
+
+    characters = bytearray(character)
+
+    match ord(character):
+        case c2 if 0b110_00010 <= c2 <= 0b110_11111:
+            characters += os.read(STDIN, 1)
+        case c3 if 0b1110_0000 <= c3 <= 0b1110_1111:
+            for i in range(2):
+                characters += os.read(STDIN, 1)
+        case c4 if 0b11110_000 <= c4 <= 0b11110_100:
+            for i in range(3):
+                characters += os.read(STDIN, 1)
+        case n if n < 0b110_0010 or n > 0b11110_100:
+            raise ValueError
+
+    return characters
+
+def read ():
+    character = os.read(STDIN, 1)
+    if 0x00 <= ord(character) <= 0x7f: return _ascii(character)
+    if 0x80 <= ord(character) <= 0xff: return _unicode(character)
+
+def write (message):
+    match message:
+        case str(sm): n = os.write(STDOUT, sm.encode())
+        case bytes()|bytearray()|memoryview() as bm: n = os.write(STDOUT, bm)
+        case _: raise TypeError
+    return n
+
+@contextmanager
+def begin_program ():
+
+    fd = STDIN
+    device = termios.tcgetattr(fd)
+    save = termios.tcgetattr(fd)
+
+    device[IFLAG] &= ~(termios.IGNCR|termios.ICRNL|termios.INLCR|termios.IXON)
+    device[OFLAG] &= ~(termios.OCRNL|termios.ONLCR)
+    device[LFLAG] &= ~(termios.ECHO|termios.ICANON|termios.IEXTEN)
+
+    device[CCHAR][termios.VMIN] = 1
+    device[CCHAR][termios.VTIME] = 0
+
+    try:
+
+        termios.tcsetattr(fd, termios.TCSAFLUSH, device)
+
+        b = "rgb:13/15/18"
+        d = "rgb:75/a4/ae"
+
+        write(encode((CDB, "?"), (CDD, "?")))
+
+        ob = read()
+        od = read()
+
+        write(encode(MBA))
+        write(encode((POS, 1, 1), (CDB, b), (CDD, d)))
+
+        yield
+
+    finally:
+
+        termios.tcsetattr(fd, termios.TCSAFLUSH, save)
+
+        write(ob + od)
+        write(encode(MBN))
+
 if __name__ == "__main__":
-    ...
+    with begin_program():
+        for _ in range(20):
+            write(read())
