@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-# 5 September
-# Demo 1 - draw_box() & conform()
+# 28 June [E. 5 September]
+# Demo A - draw_box() & conform()
 
 from editor import *
 
