@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 19 September
+# 10 October
 # Editor by Bear
 
 import os
@@ -72,7 +72,7 @@ CCHAR = 6  # CONTROL CHARACTERS
 STDIN = 0
 STDOUT = 1
 
-DOCSIZE = [18, 60]
+DOCSIZE = (18, 60)
 
 def _encode_cmd (identity, modifier=()):
     start, end, *between = *identity, *modifier
@@ -84,9 +84,8 @@ def encode (*commands):
         match cmd:
             case [*ident], *modifier: code += _encode_cmd(ident, modifier)
             case [*identity]: code += _encode_cmd(identity)
-            case str(other): code += other
             case _: raise ValueError
-    return code
+    return code.encode("ascii")
 
 def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
 
@@ -149,7 +148,7 @@ def conform (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
         row_message = f"{'':{m_c}}{norm_message[i]:{align}{mr_c}}{'':{m_c}}"
         content[message_start_row + i] = row_message
 
-    content[0] = encode((CD, *colour)) + content[0]
+    content[0] = encode((CD, *colour)).decode() + content[0]
 
     return content
 
@@ -200,7 +199,7 @@ def _unicode (character):
         case c4 if 0b11110_000 <= c4 <= 0b11110_100:
             for i in range(3):
                 characters += os.read(STDIN, 1)
-        case n if n < 0b110_0010 or n > 0b11110_100:
+        case n if n < 0b110_00010 or n > 0b11110_100:
             raise ValueError
 
     return characters
@@ -231,20 +230,17 @@ def begin_program ():
     device[CCHAR][termios.VMIN] = 1
     device[CCHAR][termios.VTIME] = 0
 
+    colours_save = bytearray()
+
     try:
 
         termios.tcsetattr(fd, termios.TCSAFLUSH, device)
 
-        b = "rgb:13/15/18"
-        d = "rgb:75/a4/ae"
-
-        write(encode((CDB, "?"), (CDD, "?")))
-
-        ob = read()
-        od = read()
-
         write(encode(MBA))
-        write(encode((POS, 1, 1), (CDB, b), (CDD, d)))
+        write(encode((POS, 1, 1), (SGR, 0), EDA))
+        write(encode((CDD, "?"), (CDB, "?"), (CDH, "?")))
+
+        colours_save += read() + read() + read()
 
         yield
 
@@ -252,10 +248,8 @@ def begin_program ():
 
         termios.tcsetattr(fd, termios.TCSAFLUSH, save)
 
-        write(ob + od)
-        write(encode(MBN))
+        write(encode(MBN, MCS))
+        write(colours_save)
 
 if __name__ == "__main__":
-    with begin_program():
-        for _ in range(20):
-            write(read())
+    ...
