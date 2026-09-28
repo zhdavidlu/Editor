@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 
-# 19 September
+# 27 September
 # Editor by Bear
 
 import os
@@ -72,7 +72,7 @@ CCHAR = 6  # CONTROL CHARACTERS
 STDIN = 0
 STDOUT = 1
 
-DOCSIZE = [18, 60]
+DOCSIZE = (18, 60)
 
 def _encode_cmd (identity, modifier=()):
     start, end, *between = *identity, *modifier
@@ -84,9 +84,8 @@ def encode (*commands):
         match cmd:
             case [*ident], *modifier: code += _encode_cmd(ident, modifier)
             case [*identity]: code += _encode_cmd(identity)
-            case str(other): code += other
             case _: raise ValueError
-    return code
+    return code.encode("ascii")
 
 def draw_box (size, colour, rrp=TOPLEFT, /, *, offset=(0,0), content=None):
 
@@ -149,7 +148,7 @@ def conform (size, colour, rrv=TOP, h=LEFT, /, *, margin=(0,0), message):
         row_message = f"{'':{m_c}}{norm_message[i]:{align}{mr_c}}{'':{m_c}}"
         content[message_start_row + i] = row_message
 
-    content[0] = encode((CD, *colour)) + content[0]
+    content[0] = encode((CD, *colour)).decode() + content[0]
 
     return content
 
@@ -235,16 +234,10 @@ def begin_program ():
 
         termios.tcsetattr(fd, termios.TCSAFLUSH, device)
 
-        b = "rgb:13/15/18"
-        d = "rgb:75/a4/ae"
+        write(encode((CDB, "?"), (CDD, "?"), (CDH, "?")))
+        colours = read() + read() + read()
 
-        write(encode((CDB, "?"), (CDD, "?")))
-
-        ob = read()
-        od = read()
-
-        write(encode(MBA))
-        write(encode((POS, 1, 1), (CDB, b), (CDD, d)))
+        write(encode(MBA, (POS, 1, 1)))
 
         yield
 
@@ -252,10 +245,8 @@ def begin_program ():
 
         termios.tcsetattr(fd, termios.TCSAFLUSH, save)
 
-        write(ob + od)
+        write(colours)
         write(encode(MBN))
 
 if __name__ == "__main__":
-    with begin_program():
-        for _ in range(20):
-            write(read())
+    ...
